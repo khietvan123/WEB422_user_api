@@ -1,3 +1,17 @@
+/********************************************************************************
+* WEB422 – Assignment 6
+*
+* I declare that this assignment is my own work in accordance with Seneca's
+* Academic Integrity Policy:
+*
+* https://www.senecapolytechnic.ca/about/policies/academic-integrity-policy.html
+*
+* Name: Khiet Van Phan   Student ID: 147072235   Date: August 13 2025
+*
+* Published URL: 
+*
+********************************************************************************/
+
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
