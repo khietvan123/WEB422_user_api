@@ -84,3 +84,5 @@ app.delete('/api/user/history/:q', auth, async (req, res)=>{
 
 const port = process.env.PORT || 8080;
 app.listen(port, ()=> console.log('API listening on ' + port));
+
+module.exports = app;
