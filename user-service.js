@@ -1,191 +1,43 @@
-/********************************************************************************
-* WEB422 – Assignment 6
-*
-* I declare that this assignment is my own work in accordance with Seneca's
-* Academic Integrity Policy:
-*
-* https://www.senecapolytechnic.ca/about/policies/academic-integrity-policy.html
-*
-* Name: Khiet Van Phan   Student ID: 147072235   Date: August 13 2025
-*
-* Published URL: 
-*
-********************************************************************************/
-
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-let mongoDBConnectionString = process.env.MONGO_URL;
-
-let Schema = mongoose.Schema;
-
-let userSchema = new Schema({
-    userName: {
-        type: String,
-        unique: true
-    },
-    password: String,
-    favourites: [String],
-    history: [String]
+let User;
+const userSchema = new mongoose.Schema({
+  userName: { type: String, unique: true },
+  password: String,
+  favourites: [Number],
+  history: [String]
 });
 
-let User;
-
-module.exports.connect = function () {
-    return new Promise(function (resolve, reject) {
-        let db = mongoose.createConnection(mongoDBConnectionString);
-
-        db.on('error', err => {
-            reject(err);
-        });
-
-        db.once('open', () => {
-            User = db.model("users", userSchema);
-            resolve();
-        });
-    });
-};
-
-module.exports.registerUser = function (userData) {
-    return new Promise(function (resolve, reject) {
-
-        if (userData.password != userData.password2) {
-            reject("Passwords do not match");
-        } else {
-
-            bcrypt.hash(userData.password, 10).then(hash => {
-
-                userData.password = hash;
-
-                let newUser = new User(userData);
-
-                newUser.save().then(() => {
-                    resolve("User " + userData.userName + " successfully registered");  
-                }).catch(err => {
-                    if (err.code == 11000) {
-                        reject("User Name already taken");
-                    } else {
-                        reject("There was an error creating the user: " + err);
-                    }
-                })
-            }).catch(err => reject(err));
-        }
-    });
-};
-
-module.exports.checkUser = function (userData) {
-    return new Promise(function (resolve, reject) {
-
-        User.findOne({ userName: userData.userName })
-            .exec()
-            .then(user => {
-                bcrypt.compare(userData.password, user.password).then(res => {
-                    if (res === true) {
-                        resolve(user);
-                    } else {
-                        reject("Incorrect password for user " + userData.userName);
-                    }
-                });
-            }).catch(err => {
-                reject("Unable to find user " + userData.userName);
-            });
-    });
-};
-
-module.exports.getFavourites = function (id) {
-    return new Promise(function (resolve, reject) {
-
-        User.findById(id)
-            .exec()
-            .then(user => {
-                resolve(user.favourites)
-            }).catch(err => {
-                reject(`Unable to get favourites for user with id: ${id}`);
-            });
-    });
+function init(connStr){
+  return mongoose.connect(connStr).then(()=>{
+    User = mongoose.model('users', userSchema);
+  });
 }
 
-module.exports.addFavourite = function (id, favId) {
-
-    return new Promise(function (resolve, reject) {
-
-        User.findById(id).exec().then(user => {
-            if (user.favourites.length < 50) {
-                User.findByIdAndUpdate(id,
-                    { $addToSet: { favourites: favId } },
-                    { new: true }
-                ).exec()
-                    .then(user => { resolve(user.favourites); })
-                    .catch(err => { reject(`Unable to update favourites for user with id: ${id}`); })
-            } else {
-                reject(`Unable to update favourites for user with id: ${id}`);
-            }
-
-        })
-
-    });
-
-
+async function addUser(userName, password, password2){
+  if(password !== password2) throw 'Passwords do not match';
+  const existing = await User.findOne({ userName });
+  if(existing) throw 'User already exists';
+  const hash = await bcrypt.hash(password, 10);
+  const u = new User({ userName, password: hash, favourites: [], history: [] });
+  await u.save();
 }
 
-module.exports.removeFavourite = function (id, favId) {
-    return new Promise(function (resolve, reject) {
-        User.findByIdAndUpdate(id,
-            { $pull: { favourites: favId } },
-            { new: true }
-        ).exec()
-            .then(user => {
-                resolve(user.favourites);
-            })
-            .catch(err => {
-                reject(`Unable to update favourites for user with id: ${id}`);
-            })
-    });
+async function checkUser(userName, password){
+  const u = await User.findOne({ userName });
+  if(!u) throw 'Unable to find user';
+  const ok = await bcrypt.compare(password, u.password);
+  if(!ok) throw 'Incorrect password';
+  return { _id: u._id.toString(), userName: u.userName };
 }
 
-module.exports.getHistory = function (id) {
-    return new Promise(function (resolve, reject) {
+async function getFavourites(userId){ const u = await User.findById(userId); return u?.favourites ?? []; }
+async function addFavourite(userId, id){ const u = await User.findById(userId); if(!u) throw 'User not found'; if(!u.favourites.includes(id)) u.favourites.push(id); await u.save(); return u.favourites; }
+async function removeFavourite(userId, id){ const u = await User.findById(userId); if(!u) throw 'User not found'; u.favourites = u.favourites.filter(x=>x!==id); await u.save(); return u.favourites; }
 
-        User.findById(id)
-            .exec()
-            .then(user => {
-                resolve(user.history)
-            }).catch(err => {
-                reject(`Unable to get history for user with id: ${id}`);
-            });
-    });
-}
+async function getHistory(userId){ const u = await User.findById(userId); return u?.history ?? []; }
+async function addHistory(userId, q){ const u = await User.findById(userId); if(!u) throw 'User not found'; u.history = [q, ...u.history.filter(x=>x!==q)].slice(0,50); await u.save(); return u.history; }
+async function removeHistory(userId, q){ const u = await User.findById(userId); if(!u) throw 'User not found'; u.history = u.history.filter(x=>x!==q); await u.save(); return u.history; }
 
-module.exports.addHistory = function (id, historyId) {
-
-    return new Promise(function (resolve, reject) {
-
-        User.findById(id).exec().then(user => {
-            if (user.favourites.length < 50) {
-                User.findByIdAndUpdate(id,
-                    { $addToSet: { history: historyId } },
-                    { new: true }
-                ).exec()
-                    .then(user => { resolve(user.history); })
-                    .catch(err => { reject(`Unable to update history for user with id: ${id}`); })
-            } else {
-                reject(`Unable to update history for user with id: ${id}`);
-            }
-        })
-    });
-}
-
-module.exports.removeHistory = function (id, historyId) {
-    return new Promise(function (resolve, reject) {
-        User.findByIdAndUpdate(id,
-            { $pull: { history: historyId } },
-            { new: true }
-        ).exec()
-            .then(user => {
-                resolve(user.history);
-            })
-            .catch(err => {
-                reject(`Unable to update history for user with id: ${id}`);
-            })
-    });
-}
+module.exports = { init, addUser, checkUser, getFavourites, addFavourite, removeFavourite, getHistory, addHistory, removeHistory };
